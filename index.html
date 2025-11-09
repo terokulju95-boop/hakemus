@@ -87,6 +87,16 @@ function getLocalDate(){
   return d.toISOString().slice(0,10);
 }
 
+// Muotoile pp.kk.vv näyttöön
+function formatDateFi(iso){
+  if(!iso) return "";
+  const parts = iso.split("-"); // [YYYY, MM, DD]
+  if(parts.length !== 3) return iso;
+  const [y,m,d] = parts;
+  return `${d}.${m}.${y.slice(-2)}`;
+}
+
+
 function setToday(){
   document.getElementById("date").value = getLocalDate();
 }
@@ -141,7 +151,7 @@ function render(){
     card.className = "item " + colorClass;
     card.innerHTML = `
       <button class="delete-btn" onclick="removeItem(${i})">×</button>
-      <div class="date">${it.date.replace(/-/g,".")}</div>
+      <div class="date">${formatDateFi(it.date)}</div>
       <div class="company">${it.company}</div>
       <div class="note">${it.note}</div>
     `;
