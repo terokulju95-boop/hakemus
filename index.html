@@ -1,0 +1,164 @@
+
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hakemuspäiväkirja</title>
+<style>
+  body{background:#0b0e14;color:#e7ebf3;font:16px system-ui;margin:0;padding:20px;}
+  .wrap{max-width:920px;margin:auto;}
+  .card{background:#141925;border-radius:16px;padding:16px;margin-bottom:20px;border:1px solid #24304a;}
+  input,select,button{height:44px;border-radius:10px;border:1px solid #2a3244;background:#0e121a;color:#e7ebf3;padding:0 12px;}
+  button{background:#4da3ff;border:none;color:#06111f;font-weight:700;cursor:pointer;}
+  .list{display:flex;flex-direction:column;gap:14px;margin-top:14px;}
+  .separator{height:4px;background:#4da3ff;border-radius:2px;margin:2px 0;}
+  .item{border-radius:14px;padding:16px;border:1px solid;position:relative;}
+  .g0{background:#062345;border-color:#1e4b86;}
+  .g1{background:#0e381f;border-color:#2a7d59;}
+  .g2{background:#2a1238;border-color:#7b3ea1;}
+  .g3{background:#3a140e;border-color:#a14a3e;}
+  .date{font-weight:800;font-size:18px;letter-spacing:.3px;}
+  .company{font-weight:700;font-size:20px;margin-top:3px;}
+  .note{color:#dbe2f5;opacity:.95;margin-top:6px;font-size:15px;}
+  .delete-btn{
+    position:absolute;
+    top:10px;
+    right:12px;
+    background:#ff5c7a;
+    color:#06111f;
+    width:32px;
+    height:32px;
+    border:none;
+    border-radius:50%;
+    font-size:20px;
+    font-weight:800;
+    cursor:pointer;
+    line-height:32px;
+    text-align:center;
+  }
+  .row{display:grid;grid-template-columns: 180px 1fr 180px;gap:10px;}
+  @media (max-width:700px){ .row{grid-template-columns:1fr;}}
+  #ownText{display:none;margin-top:8px;}
+</style>
+
+<link rel="manifest" href="manifest.json">
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+
+</head>
+<body>
+<div class="wrap">
+
+<div class="card">
+  <div class="row">
+    <input id="date" type="date"/>
+    <input id="company" type="text" placeholder="Yrityksen nimi"/>
+
+    <select id="type">
+      <option value="avoinhakemus" selected>avoinhakemus</option>
+      <option value="työtarjous">työtarjous</option>
+      <option value="yli 2 viikkoa muu kuin työtarjous">yli 2 viikkoa muu kuin työtarjous</option>
+      <option value="oma">oma</option>
+    </select>
+  </div>
+
+  <input id="ownText" type="text" placeholder="Kirjoita oma teksti"/>
+
+  <button id="add" style="width:100%;margin-top:12px;">Lisää kirjaus</button>
+</div>
+
+<div id="list" class="list"></div>
+
+</div>
+
+<script>
+const KEY = "hakemus_items_final_v5";
+let items = JSON.parse(localStorage.getItem(KEY) || "[]");
+
+function save(){ localStorage.setItem(KEY, JSON.stringify(items)); }
+
+function getLocalDate(){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,10);
+}
+
+function setToday(){
+  document.getElementById("date").value = getLocalDate();
+}
+setToday();
+
+// Näytä oma tekstikenttä jos valitaan "oma"
+document.getElementById("type").addEventListener("change",()=>{
+  const own = document.getElementById("ownText");
+  own.style.display = (document.getElementById("type").value === "oma") ? "block" : "none";
+});
+
+document.getElementById("add").onclick = () => {
+  const date = document.getElementById("date").value || getLocalDate();
+  const company = document.getElementById("company").value.trim();
+  if(!company) return;
+
+  let type = document.getElementById("type").value;
+  if(type === "oma"){
+    const t = document.getElementById("ownText").value.trim();
+    if(!t) return;
+    type = t;
+  }
+
+  const note = type + " rakennusmies";
+
+  items.unshift({date, company, note});
+  save();
+  document.getElementById("company").value="";
+  document.getElementById("ownText").value="";
+  setToday();
+  render();
+};
+
+function removeItem(i){
+  if(!confirm("Haluatko varmasti poistaa tämän merkinnän?")) return;
+  items.splice(i,1);
+  save();
+  render();
+}
+
+function render(){
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  const N = items.length;
+  const offset = ((N % 4) === 0 ? 4 : (N % 4)) - 1;
+
+  items.forEach((it, i) => {
+    const groupFromBottom = Math.floor((N - 1 - i) / 4);
+    const colorClass = "g" + (groupFromBottom % 4);
+
+    const card = document.createElement("div");
+    card.className = "item " + colorClass;
+    card.innerHTML = `
+      <button class="delete-btn" onclick="removeItem(${i})">×</button>
+      <div class="date">${it.date.replace(/-/g,".")}</div>
+      <div class="company">${it.company}</div>
+      <div class="note">${it.note}</div>
+    `;
+    list.appendChild(card);
+
+    if (i === offset || ((i - offset) % 4 === 0 && i > offset && i < N - 1)) {
+      if (i < N - 1) {
+        const sep = document.createElement("div");
+        sep.className = "separator";
+        list.appendChild(sep);
+      }
+    }
+  });
+}
+
+render();
+</script>
+
+</body>
+</html>
