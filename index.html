@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="fi">
 <head>
@@ -53,6 +52,7 @@ if('serviceWorker' in navigator){
 <body>
 <div class="wrap">
 
+<!-- Lomakekortti -->
 <div class="card">
   <div class="row">
     <input id="date" type="date"/>
@@ -71,6 +71,14 @@ if('serviceWorker' in navigator){
   <button id="add" style="width:100%;margin-top:12px;">Lisää kirjaus</button>
 </div>
 
+<!-- Export import kortti -->
+<div class="card" style="display:flex; gap:10px; flex-wrap:wrap;">
+  <button id="exportJson" style="flex:1;">Vie JSON</button>
+  <button id="importJson" style="flex:1;">Tuo JSON</button>
+  <input type="file" id="fileInput" accept="application/json" style="display:none;">
+</div>
+
+<!-- Lista -->
 <div id="list" class="list"></div>
 
 </div>
@@ -87,22 +95,19 @@ function getLocalDate(){
   return d.toISOString().slice(0,10);
 }
 
-// Muotoile pp.kk.vv näyttöön
 function formatDateFi(iso){
   if(!iso) return "";
-  const parts = iso.split("-"); // [YYYY, MM, DD]
+  const parts = iso.split("-");
   if(parts.length !== 3) return iso;
   const [y,m,d] = parts;
   return `${d}.${m}.${y.slice(-2)}`;
 }
-
 
 function setToday(){
   document.getElementById("date").value = getLocalDate();
 }
 setToday();
 
-// Näytä oma tekstikenttä jos valitaan "oma"
 document.getElementById("type").addEventListener("change",()=>{
   const own = document.getElementById("ownText");
   own.style.display = (document.getElementById("type").value === "oma") ? "block" : "none";
@@ -168,6 +173,50 @@ function render(){
 }
 
 render();
+
+/* VIE JSON */
+document.getElementById("exportJson").onclick = () => {
+  const data = JSON.stringify(items, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "hakemuspäivakirja_backup.json";
+  a.click();
+
+  URL.revokeObjectURL(url);
+};
+
+/* TUO JSON */
+document.getElementById("importJson").onclick = () => {
+  document.getElementById("fileInput").click();
+};
+
+document.getElementById("fileInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const parsed = JSON.parse(evt.target.result);
+
+      if(!Array.isArray(parsed)){
+        alert("Virheellinen JSON.");
+        return;
+      }
+
+      items = parsed;
+      save();
+      render();
+      alert("Tiedot tuotu onnistuneesti.");
+    } catch(err){
+      alert("Tiedoston lukeminen epäonnistui.");
+    }
+  };
+  reader.readAsText(file);
+};
 </script>
 
 </body>
