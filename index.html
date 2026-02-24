@@ -21,35 +21,30 @@
   .company{font-weight:700;font-size:20px;margin-top:3px;}
   .note{color:#dbe2f5;opacity:.95;margin-top:6px;font-size:15px;}
   .delete-btn{
-    position:absolute;
-    top:10px;
-    right:12px;
-    background:#ff5c7a;
-    color:#06111f;
-    width:32px;
-    height:32px;
-    border:none;
-    border-radius:50%;
-    font-size:20px;
-    font-weight:800;
-    cursor:pointer;
-    line-height:32px;
-    text-align:center;
+    position:absolute;top:10px;right:12px;
+    background:#ff5c7a;color:#06111f;
+    width:32px;height:32px;border:none;border-radius:50%;
+    font-size:20px;font-weight:800;cursor:pointer;
+    line-height:32px;text-align:center;
   }
-  .row{display:grid;grid-template-columns: 180px 1fr 180px;gap:10px;}
-  @media (max-width:700px){ .row{grid-template-columns:1fr;}}
+  .row{display:grid;grid-template-columns:180px 1fr 180px;gap:10px;}
+  @media(max-width:700px){.row{grid-template-columns:1fr;}}
   #ownText{display:none;margin-top:8px;}
+  #status{
+    position:fixed;top:0;left:0;right:0;
+    padding:8px;text-align:center;font-size:13px;font-weight:700;
+    z-index:999;transition:opacity 0.5s;opacity:0;
+  }
 </style>
-
 <link rel="manifest" href="manifest.json">
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js');
 }
 </script>
-
 </head>
 <body>
+<div id="status"></div>
 <div class="wrap">
 
 <!-- Lomakekortti -->
@@ -57,7 +52,6 @@ if('serviceWorker' in navigator){
   <div class="row">
     <input id="date" type="date"/>
     <input id="company" type="text" placeholder="Yrityksen nimi"/>
-
     <select id="type">
       <option value="avoinhakemus" selected>avoinhakemus</option>
       <option value="työtarjous">työtarjous</option>
@@ -65,30 +59,113 @@ if('serviceWorker' in navigator){
       <option value="oma">oma</option>
     </select>
   </div>
-
   <input id="ownText" type="text" placeholder="Kirjoita oma teksti"/>
-
   <button id="add" style="width:100%;margin-top:12px;">Lisää kirjaus</button>
 </div>
 
-<!-- Export import kortti -->
-<div class="card" style="display:flex; gap:10px; flex-wrap:wrap;">
+<!-- Export/Import -->
+<div class="card" style="display:flex;gap:10px;flex-wrap:wrap;">
   <button id="exportJson" style="flex:1;">Vie JSON</button>
   <button id="importJson" style="flex:1;">Tuo JSON</button>
   <input type="file" id="fileInput" accept="application/json" style="display:none;">
 </div>
 
 <!-- Lista -->
-<div id="list" class="list"></div>
+<div id="list" class="list"><p style="color:#6b7280;text-align:center">Ladataan...</p></div>
 
 </div>
 
-<script>
-const KEY = "hakemus_items_final_v5";
-let items = JSON.parse(localStorage.getItem(KEY) || "[]");
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-function save(){ localStorage.setItem(KEY, JSON.stringify(items)); }
+const firebaseConfig = {
+  apiKey: "AIzaSyDswdEF9J0gsHJH6Zo_8BGZrf8DVG3FwYc",
+  authDomain: "hakemuspaivakirja.firebaseapp.com",
+  projectId: "hakemuspaivakirja",
+  storageBucket: "hakemuspaivakirja.firebasestorage.app",
+  messagingSenderId: "836133210317",
+  appId: "1:836133210317:web:d85131ae272ecf1938c184"
+};
 
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const DATA_DOC = doc(db, "hakemus", "data");
+
+let items = [];
+let isSaving = false;
+
+// ============================
+// STATUS
+// ============================
+function showStatus(msg, color){
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.background = color || '#4da3ff';
+  el.style.color = '#06111f';
+  el.style.opacity = '1';
+  setTimeout(() => el.style.opacity = '0', 2000);
+}
+
+// ============================
+// FIREBASE TALLENNUS
+// ============================
+async function save(){
+  if(isSaving) return;
+  isSaving = true;
+  showStatus('💾 Tallennetaan...', '#f97316');
+  try {
+    // Varmuuskopio localStorageen
+    localStorage.setItem('hakemus_bkp', JSON.stringify(items));
+    await setDoc(DATA_DOC, { json: JSON.stringify(items) });
+    showStatus('✅ Tallennettu', '#22c55e');
+  } catch(e) {
+    showStatus('❌ Tallennus epäonnistui', '#dc2626');
+    console.error(e);
+  }
+  isSaving = false;
+}
+
+// ============================
+// LATAUS
+// ============================
+async function loadData(){
+  try {
+    const snap = await getDoc(DATA_DOC);
+    if(snap.exists()){
+      items = JSON.parse(snap.data().json) || [];
+    } else {
+      // Ensimmäinen käyttökerta – tarkista onko localStoragessa vanhaa dataa
+      const bkp = localStorage.getItem('hakemus_bkp') || localStorage.getItem('hakemus_items_final_v5');
+      if(bkp){
+        try {
+          items = JSON.parse(bkp);
+          await save(); // Siirrä vanha data Firebaseen
+          showStatus('✅ Vanha data siirretty pilveen!', '#22c55e');
+        } catch(e){ items = []; }
+      }
+    }
+  } catch(e) {
+    // Verkkovirhe – käytä paikallista varmuuskopiota
+    const bkp = localStorage.getItem('hakemus_bkp');
+    if(bkp) try { items = JSON.parse(bkp); } catch(e2){}
+    showStatus('⚠️ Yhteysvirhe – paikallinen data', '#f59e0b');
+  }
+  render();
+
+  // Kuuntele reaaliaikaisia muutoksia (esim. toiselta laitteelta)
+  onSnapshot(DATA_DOC, snap => {
+    if(!snap.exists() || isSaving) return;
+    try {
+      items = JSON.parse(snap.data().json) || [];
+      render();
+    } catch(e){}
+  });
+}
+
+// ============================
+// APUFUNKTIOT
+// ============================
 function getLocalDate(){
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -108,12 +185,56 @@ function setToday(){
 }
 setToday();
 
-document.getElementById("type").addEventListener("change",()=>{
+// ============================
+// RENDER
+// ============================
+function render(){
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  if(!items.length){
+    list.innerHTML = '<p style="color:#6b7280;text-align:center">Ei kirjauksia vielä.</p>';
+    return;
+  }
+  const N = items.length;
+  const offset = ((N % 4) === 0 ? 4 : (N % 4)) - 1;
+
+  items.forEach((it, i) => {
+    const groupFromBottom = Math.floor((N - 1 - i) / 4);
+    const colorClass = "g" + (groupFromBottom % 4);
+    const card = document.createElement("div");
+    card.className = "item " + colorClass;
+    card.innerHTML = `
+      <button class="delete-btn" data-i="${i}">×</button>
+      <div class="date">${formatDateFi(it.date)}</div>
+      <div class="company">${it.company}</div>
+      <div class="note">${it.note}</div>
+    `;
+    list.appendChild(card);
+
+    if(i === offset || ((i - offset) % 4 === 0 && i > offset && i < N - 1)){
+      if(i < N - 1){
+        const sep = document.createElement("div");
+        sep.className = "separator";
+        list.appendChild(sep);
+      }
+    }
+  });
+
+  // Poisto-napit
+  list.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeItem(+btn.dataset.i));
+  });
+}
+
+// ============================
+// LISÄÄ
+// ============================
+document.getElementById("type").addEventListener("change", () => {
   const own = document.getElementById("ownText");
   own.style.display = (document.getElementById("type").value === "oma") ? "block" : "none";
 });
 
-document.getElementById("add").onclick = () => {
+document.getElementById("add").onclick = async () => {
   const date = document.getElementById("date").value || getLocalDate();
   const company = document.getElementById("company").value.trim();
   if(!company) return;
@@ -126,90 +247,52 @@ document.getElementById("add").onclick = () => {
   }
 
   const note = type + " rakennusmies";
-
   items.unshift({date, company, note});
-  save();
-  document.getElementById("company").value="";
-  document.getElementById("ownText").value="";
+  document.getElementById("company").value = "";
+  document.getElementById("ownText").value = "";
   setToday();
   render();
+  await save();
 };
 
-function removeItem(i){
+// ============================
+// POISTA
+// ============================
+async function removeItem(i){
   if(!confirm("Haluatko varmasti poistaa tämän merkinnän?")) return;
-  items.splice(i,1);
-  save();
+  items.splice(i, 1);
   render();
+  await save();
 }
 
-function render(){
-  const list = document.getElementById("list");
-  list.innerHTML = "";
-  const N = items.length;
-  const offset = ((N % 4) === 0 ? 4 : (N % 4)) - 1;
-
-  items.forEach((it, i) => {
-    const groupFromBottom = Math.floor((N - 1 - i) / 4);
-    const colorClass = "g" + (groupFromBottom % 4);
-
-    const card = document.createElement("div");
-    card.className = "item " + colorClass;
-    card.innerHTML = `
-      <button class="delete-btn" onclick="removeItem(${i})">×</button>
-      <div class="date">${formatDateFi(it.date)}</div>
-      <div class="company">${it.company}</div>
-      <div class="note">${it.note}</div>
-    `;
-    list.appendChild(card);
-
-    if (i === offset || ((i - offset) % 4 === 0 && i > offset && i < N - 1)) {
-      if (i < N - 1) {
-        const sep = document.createElement("div");
-        sep.className = "separator";
-        list.appendChild(sep);
-      }
-    }
-  });
-}
-
-render();
-
-/* VIE JSON */
+// ============================
+// VIE / TUO JSON
+// ============================
 document.getElementById("exportJson").onclick = () => {
-  const data = JSON.stringify(items, null, 2);
-  const blob = new Blob([data], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(items, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement("a");
   a.href = url;
-  a.download = "hakemuspäivakirja_backup.json";
+  a.download = "hakemuspaivakirja_backup.json";
   a.click();
-
   URL.revokeObjectURL(url);
 };
 
-/* TUO JSON */
 document.getElementById("importJson").onclick = () => {
   document.getElementById("fileInput").click();
 };
 
-document.getElementById("fileInput").onchange = (e) => {
+document.getElementById("fileInput").onchange = async (e) => {
   const file = e.target.files[0];
   if(!file) return;
-
   const reader = new FileReader();
-  reader.onload = (evt) => {
+  reader.onload = async (evt) => {
     try {
       const parsed = JSON.parse(evt.target.result);
-
-      if(!Array.isArray(parsed)){
-        alert("Virheellinen JSON.");
-        return;
-      }
-
+      if(!Array.isArray(parsed)){ alert("Virheellinen JSON."); return; }
       items = parsed;
-      save();
       render();
+      await save();
       alert("Tiedot tuotu onnistuneesti.");
     } catch(err){
       alert("Tiedoston lukeminen epäonnistui.");
@@ -217,6 +300,11 @@ document.getElementById("fileInput").onchange = (e) => {
   };
   reader.readAsText(file);
 };
+
+// ============================
+// KÄYNNISTYS
+// ============================
+loadData();
 </script>
 
 </body>
