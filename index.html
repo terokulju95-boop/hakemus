@@ -35,6 +35,26 @@
     padding:8px;text-align:center;font-size:13px;font-weight:700;
     z-index:999;transition:opacity 0.5s;opacity:0;
   }
+  /* PIN */
+  #pinScreen{
+    position:fixed;inset:0;background:#0b0e14;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    z-index:9999;gap:16px;
+  }
+  .pin-title{font-size:24px;font-weight:800;color:#e7ebf3;}
+  .pin-sub{font-size:14px;color:#6b7280;}
+  .pin-dots{display:flex;gap:12px;margin:8px 0;}
+  .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #4da3ff;background:transparent;transition:background 0.15s;}
+  .pin-dot.filled{background:#4da3ff;}
+  .pin-pad{display:grid;grid-template-columns:repeat(3,72px);gap:10px;}
+  .pin-key{
+    height:72px;width:72px;border-radius:16px;
+    background:#141925;border:1px solid #24304a;
+    color:#e7ebf3;font-size:24px;font-weight:700;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .pin-key:active{background:#1e2d45;}
+  .pin-error{color:#ff5c7a;font-weight:700;font-size:14px;min-height:20px;}
 </style>
 <link rel="manifest" href="manifest.json">
 <script>
@@ -44,6 +64,31 @@ if('serviceWorker' in navigator){
 </script>
 </head>
 <body>
+<div id="pinScreen">
+  <div class="pin-title">🔒 Hakemuspäiväkirja</div>
+  <div class="pin-sub">Syötä PIN-koodi</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-key" data-v="1">1</button>
+    <button class="pin-key" data-v="2">2</button>
+    <button class="pin-key" data-v="3">3</button>
+    <button class="pin-key" data-v="4">4</button>
+    <button class="pin-key" data-v="5">5</button>
+    <button class="pin-key" data-v="6">6</button>
+    <button class="pin-key" data-v="7">7</button>
+    <button class="pin-key" data-v="8">8</button>
+    <button class="pin-key" data-v="9">9</button>
+    <button class="pin-key" data-v="back" style="font-size:18px">←</button>
+    <button class="pin-key" data-v="0">0</button>
+    <button class="pin-key" data-v="clear" style="font-size:16px">✕</button>
+  </div>
+  <div class="pin-error" id="pinError"></div>
+</div>
 <div id="status"></div>
 <div class="wrap">
 
@@ -302,9 +347,66 @@ document.getElementById("fileInput").onchange = async (e) => {
 };
 
 // ============================
+// PIN-KOODI (tallennettu Firebaseen)
+// ============================
+const PIN_DOC = doc(db, "hakemus", "pin");
+const PIN_SESSION_KEY = "hakemus_pin_ok";
+let pinBuffer = "";
+
+function renderPinDots(){
+  const dots = document.querySelectorAll('.pin-dot');
+  dots.forEach((d,i) => d.classList.toggle('filled', i < pinBuffer.length));
+}
+
+async function checkPin(){
+  const err = document.getElementById('pinError');
+  try {
+    const snap = await getDoc(PIN_DOC);
+    if(!snap.exists()){
+      // PIN ei ole asetettu vielä - avaa sovellus ja näytä ohje
+      document.getElementById('pinScreen').style.display = 'none';
+      loadData();
+      showStatus('⚠️ Aseta PIN Firebasessa (hakemus/pin)', '#f59e0b');
+      return;
+    }
+    const correctPin = snap.data().code;
+    if(pinBuffer === correctPin){
+      sessionStorage.setItem(PIN_SESSION_KEY, "1");
+      document.getElementById('pinScreen').style.display = 'none';
+      loadData();
+    } else {
+      err.textContent = "Väärä PIN-koodi";
+      pinBuffer = "";
+      setTimeout(() => renderPinDots(), 300);
+    }
+  } catch(e) {
+    err.textContent = "Yhteysvirhe, yritä uudelleen";
+    pinBuffer = "";
+    renderPinDots();
+  }
+}
+
+function handlePinKey(v){
+  const err = document.getElementById('pinError');
+  if(v === 'clear'){ pinBuffer = ""; renderPinDots(); err.textContent = ""; return; }
+  if(v === 'back'){ pinBuffer = pinBuffer.slice(0,-1); renderPinDots(); err.textContent = ""; return; }
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += v;
+  renderPinDots();
+  if(pinBuffer.length === 4) checkPin();
+}
+
+document.querySelectorAll('.pin-key').forEach(btn => {
+  btn.addEventListener('click', () => handlePinKey(btn.dataset.v));
+});
+
+// ============================
 // KÄYNNISTYS
 // ============================
-loadData();
+if(sessionStorage.getItem(PIN_SESSION_KEY)){
+  document.getElementById('pinScreen').style.display = 'none';
+  loadData();
+}
 </script>
 
 </body>
