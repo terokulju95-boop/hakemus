@@ -264,12 +264,29 @@ function render(){
     const colorClass = "g" + (groupFromBottom % 4);
     const card = document.createElement("div");
     card.className = "item " + colorClass;
-    card.innerHTML = `
-      <button class="delete-btn" data-i="${i}">×</button>
-      <div class="date">${formatDateFi(it.date)}</div>
-      <div class="company">${it.company}</div>
-      <div class="note">${it.note}</div>
-    `;
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-btn";
+    delBtn.dataset.i = i;
+    delBtn.textContent = "×";
+
+    const dateDiv = document.createElement("div");
+    dateDiv.className = "date";
+    dateDiv.textContent = formatDateFi(it.date);
+
+    const companyDiv = document.createElement("div");
+    companyDiv.className = "company";
+    companyDiv.textContent = it.company;
+
+    const noteDiv = document.createElement("div");
+    noteDiv.className = "note";
+    noteDiv.textContent = it.note;
+
+    card.appendChild(delBtn);
+    card.appendChild(dateDiv);
+    card.appendChild(companyDiv);
+    card.appendChild(noteDiv);
+
     list.appendChild(card);
 
     if(i === offset || ((i - offset) % 4 === 0 && i > offset && i < N - 1)){
